@@ -1,71 +1,71 @@
-# 1차 프로토타입용 Streamlit 대시보드 코드
-# 주요 종목: 삼성전자, 다이와증권, 메드트로닉
 
 import streamlit as st
-import pandas as pd
 import yfinance as yf
+import pandas as pd
 import plotly.graph_objects as go
 
-# 다국어 지원 세팅
-LANG = st.sidebar.selectbox("언어 선택 / Language / 言語", ["한국어", "English", "日本語"])
+# 기본 설정
+st.set_page_config(layout="wide", page_title="Global Stock Dashboard", page_icon=":bar_chart:")
 
+# 다국어 지원
+LANGUAGES = {"한국어": "KR", "English": "EN", "日本語": "JP"}
 LABELS = {
-    "기업 선택": {"한국어": "기업 선택", "English": "Select Company", "日本語": "企業選択"},
-    "발행주식수": {"한국어": "발행주식수", "English": "Shares Outstanding", "日本語": "発行株式数"},
-    "시가총액": {"한국어": "시가총액", "English": "Market Cap", "日本語": "時価総額"},
-    "최근 종가": {"한국어": "최근 종가", "English": "Latest Price", "日本語": "最新株価"},
-    "재무제표": {"한국어": "재무제표", "English": "Financials", "日本語": "財務諸表"},
-    "멀티차트": {"한국어": "멀티 밸류에이션 차트", "English": "Valuation Multi Chart", "日本語": "マルチバリュエーションチャート"},
+    "발행주식수": {"KR": "발행주식 수", "EN": "Shares Outstanding", "JP": "発行株式数"},
+    "시가총액": {"KR": "시가총액", "EN": "Market Cap", "JP": "時価総額"},
+    "최근종가": {"KR": "최근 종가", "EN": "Last Price", "JP": "直近終値"},
+    "선택": {"KR": "선택", "EN": "Select", "JP": "選択"},
+    "주식코드입력": {"KR": "종목 코드 입력 (예: 삼성전자 → 005930.KS, Medtronic → MDT)", 
+                    "EN": "Enter stock code (e.g., 005930.KS for Samsung, MDT for Medtronic)", 
+                    "JP": "銘柄コードを入力（例：サムスン → 005930.KS、メドトロニック → MDT）"},
 }
 
-# 기본 종목 리스트
-companies = {
-    "삼성전자 (KR)": "005930.KQ",
-    "다이와증권 (JP)": "8601.T",
-    "메드트로닉 (US)": "MDT"
-}
+# 언어 선택
+lang_select = st.sidebar.selectbox("🌐 Language", list(LANGUAGES.keys()))
+LANG = LANGUAGES[lang_select]
 
-st.title("📊 글로벌 종목 Fact 리서치 대시보드")
+st.title("📊 Global Stock Dashboard")
+ticker_input = st.text_input(LABELS["주식코드입력"][LANG], value="005930.KS")
 
-# 기업 선택
-selection = st.selectbox(LABELS["기업 선택"][LANG], list(companies.keys()))
-ticker = companies[selection]
-data = yf.Ticker(ticker)
+if ticker_input:
+    ticker = yf.Ticker(ticker_input)
+    info = ticker.info
 
-info = data.info
+    # 메트릭 표시
+    st.subheader("🔢 기본 정보")
+    col1, col2, col3 = st.columns(3)
 
-st.header(selection)
-col1, col2, col3 = st.columns(3)
-col1.metric(LABELS["발행주식수"][LANG], f"{info.get('sharesOutstanding', 'N/A'):,}")
-col2.metric(LABELS["시가총액"][LANG], f"{info.get('marketCap', 'N/A')/1e6:,.0f}M")
-col3.metric(LABELS["최근 종가"][LANG], f"{info.get('currentPrice', 'N/A')}")
+    # 안전한 숫자 포맷팅
+    shares_outstanding = info.get("sharesOutstanding")
+    market_cap = info.get("marketCap")
+    current_price = info.get("currentPrice")
 
-# 재무제표 출력
-st.subheader(LABELS["재무제표"][LANG])
-try:
-    fin_df = data.financials.T
-    st.dataframe(fin_df.style.format("{:,.0f}"))
-except:
-    st.write("재무제표 데이터를 불러올 수 없습니다.")
+    col1.metric(
+        LABELS["발행주식수"][LANG],
+        f"{shares_outstanding:,}" if shares_outstanding else "N/A"
+    )
+    col2.metric(
+        LABELS["시가총액"][LANG],
+        f"{market_cap:,}" if market_cap else "N/A"
+    )
+    col3.metric(
+        LABELS["최근종가"][LANG],
+        f"{current_price:,}" if current_price else "N/A"
+    )
 
-# 멀티 밸류에이션 차트
-st.subheader(LABELS["멀티차트"][LANG])
-chart_options = st.multiselect("차트 항목 선택", ["PER", "PBR", "PSR", "Dividend Yield"], default=["PER", "PBR"])
+    # 재무제표
+    st.subheader("📈 재무제표")
+    try:
+        annual_bs = ticker.balance_sheet
+        annual_is = ticker.financials
+        annual_cf = ticker.cashflow
 
-# 예시용 가짜 데이터
-years = [str(y) for y in range(2019, 2024)]
-data_map = {
-    "PER": [12.1, 15.3, 10.2, 9.8, 13.5],
-    "PBR": [1.1, 1.3, 1.0, 1.2, 1.4],
-    "PSR": [2.1, 2.4, 2.0, 1.9, 2.3],
-    "Dividend Yield": [2.5, 2.4, 2.7, 3.0, 2.8],
-}
+        st.write("**[연결 기준 Balance Sheet]**")
+        st.dataframe(annual_bs)
 
-fig = go.Figure()
-for metric in chart_options:
-    fig.add_trace(go.Scatter(x=years, y=data_map[metric], mode="lines+markers", name=metric))
-fig.update_layout(height=400, template="plotly_dark" if st.get_option("theme.base") == "dark" else "plotly")
-st.plotly_chart(fig)
+        st.write("**[연결 기준 Income Statement]**")
+        st.dataframe(annual_is)
 
-st.markdown("---")
-st.caption("프로토타입 버전입니다. 정성 분석 및 추가 항목은 다음 버전에 포함됩니다.")
+        st.write("**[연결 기준 Cashflow Statement]**")
+        st.dataframe(annual_cf)
+    except Exception as e:
+        st.error(f"재무 데이터를 불러오는 데 실패했습니다: {e}")
